@@ -1,6 +1,7 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import { Vector3, OrthographicCamera as ThreeOrthographicCamera } from "three";
+import { useCameraState } from "../contexts/CameraContext";
 
 type OrthographicCameraProps = {
   position: [number, number, number]; // Camera position
@@ -43,7 +44,20 @@ export default function OrthographicCamera(props: OrthographicCameraProps) {
   const lastMousePos = useRef<{ x: number; y: number } | null>(null);
   const resetTimeout = useRef<ReturnType<typeof setTimeout>>();
 
-  // Setup camera
+  // Camera rotation
+  const { rotation } = useCameraState();
+
+  /// Calculate rotated position
+  const angleInRadians = (rotation * Math.PI) / 180;
+  const radius = Math.sqrt(
+    position[0] * position[0] + position[2] * position[2]
+  );
+  const rotatedPosition: [number, number, number] = [
+    radius * Math.cos(angleInRadians),
+    position[1],
+    radius * Math.sin(angleInRadians),
+  ];
+
   useEffect(() => {
     // When the aspect ratio of the canvas changes, the left and right
     // planes of the camera frustum need to be adjusted accordingly.
@@ -71,7 +85,7 @@ export default function OrthographicCamera(props: OrthographicCameraProps) {
     }
 
     cameraRef.current.zoom = zoom;
-    cameraRef.current.position.set(...position);
+    cameraRef.current.position.set(...rotatedPosition);
     cameraRef.current.lookAt(cameraTarget.current);
     cameraRef.current.updateProjectionMatrix();
 
@@ -82,7 +96,7 @@ export default function OrthographicCamera(props: OrthographicCameraProps) {
         cameraRef.current.removeFromParent();
       }
     };
-  }, [set, size, left, right, top, bottom, near, far, zoom, position]);
+  }, [set, size, rotation, left, right, top, bottom, near, far, zoom]);
 
   // Update target when prop changes
   useEffect(() => {
@@ -143,24 +157,21 @@ export default function OrthographicCamera(props: OrthographicCameraProps) {
     };
   }, [panSpeed, resetDelay, zoom, size.width]);
 
-  // Update camera position and target in animation frame
   useFrame(() => {
     if (cameraRef.current) {
-      // Apply base position plus pan offset
-      const newPosition: [number, number, number] = [
-        position[0] + panOffset[0],
-        position[1] + panOffset[1],
-        position[2] + panOffset[2],
-      ];
+      const basePosition = [
+        rotatedPosition[0] + panOffset[0],
+        rotatedPosition[1] + panOffset[1],
+        rotatedPosition[2] + panOffset[2],
+      ] as [number, number, number];
 
-      // Apply pan offset to target as well to maintain relative position
       const newTarget: [number, number, number] = [
         target[0] + panOffset[0],
         target[1] + panOffset[1],
         target[2] + panOffset[2],
       ];
 
-      cameraRef.current.position.set(...newPosition);
+      cameraRef.current.position.set(...basePosition);
       cameraTarget.current.set(...newTarget);
       cameraRef.current.lookAt(cameraTarget.current);
       cameraRef.current.updateProjectionMatrix();
