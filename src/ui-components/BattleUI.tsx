@@ -1,4 +1,6 @@
 import { useGameStore } from "../store/gameStore";
+import { getUnitTemplate } from "../data/unitData";
+import { Affinity } from "../types/game";
 
 const BattleUI = () => {
   const {
@@ -16,6 +18,36 @@ const BattleUI = () => {
 
   // Get selected unit
   const selectedUnit = selectedUnitId ? units[selectedUnitId] : null;
+
+  // Get unit template if a unit is selected
+  const unitTemplate = selectedUnit
+    ? getUnitTemplate(selectedUnit.templateId)
+    : null;
+
+  // Helper function to get element color
+  const getElementColor = (affinity: Affinity): string => {
+    switch (affinity) {
+      case Affinity.FIRE:
+        return "text-red-500";
+      case Affinity.WATER:
+        return "text-blue-500";
+      case Affinity.EARTH:
+        return "text-yellow-800";
+      case Affinity.WIND:
+        return "text-green-400";
+      case Affinity.LIGHTNING:
+        return "text-yellow-400";
+      case Affinity.NEUTRAL:
+        return "text-blue-300";
+      case Affinity.NEUTRAL:
+        return "text-yellow-200";
+      case Affinity.NEUTRAL:
+        return "text-purple-500";
+      case Affinity.NEUTRAL:
+      default:
+        return "text-gray-400";
+    }
+  };
 
   return (
     <div className="z-10 absolute bottom-0 right-0 flex flex-col items-end">
@@ -45,7 +77,7 @@ const BattleUI = () => {
       </div>
 
       {/* Game Info Panel */}
-      <div className="m-4 w-64 bg-gray-800/75 rounded-lg p-4 text-white">
+      <div className="m-4 w-72 bg-gray-800/75 rounded-lg p-4 text-white">
         {/* Current Turn */}
         <div className="mb-4">
           <h2 className="text-xl font-bold">
@@ -64,8 +96,19 @@ const BattleUI = () => {
         {/* Selected Unit Info */}
         {selectedUnit && (
           <div className="border-t border-gray-600 pt-4">
-            <h3 className="text-lg font-semibold">{selectedUnit.name}</h3>
-            <p className="text-sm">Type: {selectedUnit.type}</p>
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">{selectedUnit.name}</h3>
+              <span
+                className={`px-2 py-1 rounded text-xs ${getElementColor(
+                  selectedUnit.affinity
+                )}`}
+              >
+                {selectedUnit.affinity}
+              </span>
+            </div>
+            <p className="text-sm">
+              {unitTemplate?.description || `Type: ${selectedUnit.type}`}
+            </p>
             <div className="mt-2 max-h-64 overflow-y-auto pr-2">
               {/* Basic Stats */}
               <div className="flex justify-between">
@@ -146,6 +189,23 @@ const BattleUI = () => {
                   <span>{selectedUnit.attributes.resolve}%</span>
                 </div>
               </div>
+
+              {/* Abilities */}
+              {selectedUnit.abilities.length > 0 && (
+                <div className="mt-2 border-t border-gray-600 pt-2">
+                  <h4 className="text-sm font-semibold mb-1">Abilities:</h4>
+                  <ul className="text-xs space-y-1">
+                    {selectedUnit.abilities.map((ability) => (
+                      <li
+                        key={ability.id}
+                        className="p-1 bg-gray-700/50 rounded"
+                      >
+                        {ability.name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         )}

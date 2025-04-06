@@ -1,7 +1,7 @@
 import { memo, useRef, useState, useEffect } from "react";
 import { ThreeEvent, useFrame } from "@react-three/fiber";
 import { useGameStore } from "../store/gameStore";
-import { EntityId, UnitType } from "../types/game";
+import { EntityId, UnitType, Affinity } from "../types/game";
 import { Object3D, Vector3 } from "three";
 import { Group } from "three";
 
@@ -66,37 +66,89 @@ const Unit = memo(({ unitId }: UnitProps) => {
     executePath();
   };
 
+  // Get element color based on unit's affinity
+  const getElementColor = (affinity: Affinity): string => {
+    switch (affinity) {
+      case Affinity.FIRE:
+        return "red";
+      case Affinity.WATER:
+        return "blue";
+      case Affinity.EARTH:
+        return "brown";
+      case Affinity.WIND:
+        return "lightgreen";
+      case Affinity.LIGHTNING:
+        return "yellow";
+      case Affinity.WATER:
+        return "lightblue";
+      case Affinity.NEUTRAL:
+        return "white";
+      case Affinity.NEUTRAL:
+        return "purple";
+      case Affinity.NEUTRAL:
+      default:
+        return "gray";
+    }
+  };
+
   // Select the appropriate model and color based on unit type
   const getUnitModel = () => {
-    // In a real game, we would use different models for different unit types
-    // For this prototype, we'll use simple geometries
+    // In a real game, we would use model IDs from the template to load actual models
+    // For this prototype, we'll use simple geometries with colors based on element
+    const elementColor = getElementColor(unit.affinity);
+    const selectedColor = "yellow";
+
     switch (unit.type) {
       case UnitType.WARRIOR:
         return (
           <mesh onClick={handleUnitClick}>
             <boxGeometry args={[0.6, 0.8, 0.6]} />
-            <meshStandardMaterial color={isSelected ? "yellow" : "blue"} />
+            <meshStandardMaterial
+              color={isSelected ? selectedColor : elementColor}
+            />
           </mesh>
         );
       case UnitType.ARCHER:
         return (
           <mesh onClick={handleUnitClick}>
             <coneGeometry args={[0.4, 0.8, 8]} />
-            <meshStandardMaterial color={isSelected ? "yellow" : "blue"} />
+            <meshStandardMaterial
+              color={isSelected ? selectedColor : elementColor}
+            />
           </mesh>
         );
       case UnitType.MAGE:
         return (
           <mesh onClick={handleUnitClick}>
             <sphereGeometry args={[0.4, 8, 8]} />
-            <meshStandardMaterial color={isSelected ? "yellow" : "blue"} />
+            <meshStandardMaterial
+              color={isSelected ? selectedColor : elementColor}
+            />
+          </mesh>
+        );
+      case UnitType.HEALER:
+        return (
+          <mesh onClick={handleUnitClick}>
+            <sphereGeometry args={[0.35, 8, 8]} />
+            <meshStandardMaterial
+              color={isSelected ? selectedColor : elementColor}
+            />
+          </mesh>
+        );
+      case UnitType.ROGUE:
+        return (
+          <mesh onClick={handleUnitClick}>
+            <octahedronGeometry args={[0.4, 0]} />
+            <meshStandardMaterial
+              color={isSelected ? selectedColor : elementColor}
+            />
           </mesh>
         );
       default:
         return (
           <mesh onClick={handleUnitClick}>
             <sphereGeometry args={[0.4, 8, 8]} />
-            <meshStandardMaterial color={isSelected ? "yellow" : "red"} />
+            <meshStandardMaterial color={isSelected ? selectedColor : "gray"} />
           </mesh>
         );
     }

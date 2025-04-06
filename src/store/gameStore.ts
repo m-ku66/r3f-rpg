@@ -11,7 +11,12 @@ import {
   UnitType,
   BaseStats,
   UnitAttributes,
+  Affinity,
 } from "../types/game";
+
+// Import our data files
+import { unitTemplates, getUnitTemplate } from "../data/unitData";
+import { getAbilityTemplates } from "../data/abilityData";
 
 // Core game state
 interface GameState {
@@ -107,130 +112,6 @@ function generateTerrainGrid(
   return cells;
 }
 
-// Create default unit stats based on type
-function createDefaultStats(type: UnitType): BaseStats {
-  switch (type) {
-    case UnitType.WARRIOR:
-      return {
-        level: 1,
-        exp: 0,
-        hp: 55,
-        maxHp: 55,
-        patk: 8,
-        matk: 2,
-        mp: 5,
-        maxMp: 5,
-        sp: 40,
-        maxSp: 40,
-        range: 1,
-        def: 20,
-        res: 5,
-        agi: 4,
-        skill: 20,
-        luck: 5,
-        wis: 1,
-        mov: 4,
-        jump: 2,
-      };
-    case UnitType.ARCHER:
-      return {
-        level: 1,
-        exp: 0,
-        hp: 75,
-        maxHp: 75,
-        patk: 6,
-        matk: 3,
-        mp: 5,
-        maxMp: 5,
-        sp: 30,
-        maxSp: 30,
-        range: 5,
-        def: 10,
-        res: 5,
-        agi: 8,
-        skill: 25,
-        luck: 30,
-        wis: 3,
-        mov: 5,
-        jump: 2,
-      };
-    case UnitType.MAGE:
-      return {
-        level: 1,
-        exp: 0,
-        hp: 60,
-        maxHp: 60,
-        patk: 2,
-        matk: 10,
-        mp: 30,
-        maxMp: 30,
-        sp: 5,
-        maxSp: 5,
-        range: 3,
-        def: 2,
-        res: 6,
-        agi: 3,
-        skill: 3,
-        luck: 4,
-        wis: 10,
-        mov: 3,
-        jump: 1,
-      };
-    default:
-      return {
-        level: 1,
-        exp: 0,
-        hp: 80,
-        maxHp: 80,
-        patk: 5,
-        matk: 5,
-        mp: 10,
-        maxMp: 10,
-        sp: 5,
-        maxSp: 5,
-        range: 1,
-        def: 3,
-        res: 3,
-        agi: 4,
-        skill: 4,
-        luck: 4,
-        wis: 4,
-        mov: 4,
-        jump: 2,
-      };
-  }
-}
-
-// Create default attributes based on type
-function createDefaultAttributes(type: UnitType): UnitAttributes {
-  switch (type) {
-    case UnitType.WARRIOR:
-      return {
-        hitRate: 90,
-        evasionRate: 5,
-        resolve: 40,
-      };
-    case UnitType.ARCHER:
-      return {
-        hitRate: 95,
-        evasionRate: 20,
-        resolve: 5,
-      };
-    case UnitType.MAGE:
-      return {
-        hitRate: 85,
-        evasionRate: 5,
-        resolve: 5,
-      };
-    default:
-      return {
-        hitRate: 90,
-        evasionRate: 5,
-        resolve: 5,
-      };
-  }
-}
-
 // All the actions and derived state for our game
 interface GameActions {
   // Terrain actions
@@ -248,9 +129,9 @@ interface GameActions {
   ) => EntityId;
   createUnit: (
     playerId: EntityId,
-    type: UnitType,
+    templateId: string,
     position: [number, number, number],
-    name?: string
+    customName?: string
   ) => EntityId;
   selectUnit: (id: EntityId | null) => void;
   selectAbility: (id: string | null) => void;
@@ -347,30 +228,52 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return id;
   },
 
-  createUnit: (
-    playerId,
-    type,
-    position,
-    name = `${type}-${uuidv4().slice(0, 4)}`
-  ) => {
+  createUnit: (playerId, templateId, position, customName) => {
     const id = uuidv4();
-    const stats = createDefaultStats(type);
-    const attributes = createDefaultAttributes(type);
+
+    // Get unit template from our data file
+    const template = getUnitTemplate(templateId);
+
+    if (!template) {
+      console.error(`Template with ID ${templateId} not found`);
+      return id; // Return ID but don't create unit
+    }
+
+    // Get abilities for this unit based on template's abilityIds
+    const abilityTemplates = getAbilityTemplates(template.abilityIds);
+
+    // Create the unit data from the template
+    const unitData: UnitData = {
+      id,
+      templateId,
+      name: customName || template.name,
+      type: template.type,
+      position,
+      stats: { ...template.baseStats },
+      attributes: { ...template.attributes },
+      abilities: abilityTemplates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        cost: template.costValue, // Assuming costValue is the correct property
+        range: template.range,
+        area: template.area,
+        effect: (target: EntityId) => {
+          // Implement the effect logic here
+        },
+      })),
+      level: template.baseStats.level,
+      exp: template.baseStats.exp,
+      affinity: template.affinity,
+      modelId: template.modelId,
+      currentState: "idle",
+    };
 
     // Create the unit
     set((state) => ({
       units: {
         ...state.units,
-        [id]: {
-          id,
-          name,
-          type,
-          position,
-          stats,
-          attributes,
-          abilities: [],
-          currentState: "idle",
-        },
+        [id]: unitData,
       },
     }));
 
@@ -678,7 +581,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!unitCell) return;
 
     // Use A* algorithm to find path
-    // (Using the existing A* implementation)
     const path = aStarPathfinding(unitCell, targetCell, terrain.grid);
 
     if (path.length > 0) {
@@ -765,8 +667,6 @@ function aStarPathfinding(
   target: GridCell,
   grid: GridCell[]
 ): GridCell[] {
-  // A* implementation as before
-  // ... (keep the same implementation)
   const openSet: GridCell[] = [start];
   const closedSet = new Set<string>();
   const cameFrom = new Map<string, GridCell>();

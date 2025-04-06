@@ -1,7 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect } from "react";
 import { useGameStore } from "../store/gameStore";
-import { UnitType } from "../types/game";
 import OrthoCam from "./OrthoCam";
 import Terrain from "./Terrain";
 import Unit from "./Unit";
@@ -34,8 +33,8 @@ const GameRenderer = () => {
         );
 
       if (playerStartCell) {
-        // Add player units
-        createUnit(playerId, UnitType.WARRIOR, [
+        // Add player units using template IDs instead of unit types
+        createUnit(playerId, "warrior_basic", [
           playerStartCell.x,
           playerStartCell.y,
           playerStartCell.z,
@@ -50,21 +49,54 @@ const GameRenderer = () => {
         );
 
         if (adjacentCell) {
-          createUnit(playerId, UnitType.ARCHER, [
+          createUnit(playerId, "archer_basic", [
             adjacentCell.x,
             adjacentCell.y,
             adjacentCell.z,
           ]);
         }
+
+        // Add an elite unit for the player too
+        const eliteCell = terrain.grid.find(
+          (cell) =>
+            cell.x === playerStartCell.x &&
+            cell.z === playerStartCell.z + 1 &&
+            cell.traversable
+        );
+
+        if (eliteCell) {
+          createUnit(
+            playerId,
+            "warrior_elite",
+            [eliteCell.x, eliteCell.y, eliteCell.z],
+            "Captain"
+          );
+        }
       }
 
       if (enemyStartCell) {
-        // Add enemy unit
-        createUnit(enemyId, UnitType.MAGE, [
+        // Add enemy unit using template ID
+        createUnit(enemyId, "mage_basic", [
           enemyStartCell.x,
           enemyStartCell.y,
           enemyStartCell.z,
         ]);
+
+        // Add another enemy unit
+        const secondEnemyCell = terrain.grid.find(
+          (cell) =>
+            cell.x === enemyStartCell.x + 1 &&
+            cell.z === enemyStartCell.z &&
+            cell.traversable
+        );
+
+        if (secondEnemyCell) {
+          createUnit(enemyId, "rogue_basic", [
+            secondEnemyCell.x,
+            secondEnemyCell.y,
+            secondEnemyCell.z,
+          ]);
+        }
       }
     }
   }, [terrain.grid, players, createPlayer, createUnit]);

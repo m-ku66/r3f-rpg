@@ -1,5 +1,23 @@
 export type EntityId = string;
 
+// Additional enums for unit characteristics
+export enum UnitRarity {
+  COMMON = "common",
+  UNCOMMON = "uncommon",
+  RARE = "rare",
+  EPIC = "epic",
+  LEGENDARY = "legendary",
+}
+
+export enum Affinity {
+  FIRE = "fire",
+  WATER = "water",
+  EARTH = "earth",
+  WIND = "wind",
+  LIGHTNING = "lightning",
+  NEUTRAL = "neutral",
+}
+
 // Base stats that any unit would have
 // These directly affect how a unit performs in battle
 export interface BaseStats {
@@ -23,6 +41,24 @@ export interface BaseStats {
   wis: number; // Wisdom (crit chance for magical attacks; critical hits never miss)
   mov: number; // Movement (horizontal movement)
   jump: number; // Jump (vertical movement)
+}
+
+// Growth rates for unit stats when leveling up
+export interface GrowthRates {
+  hp: number;
+  maxHp: number;
+  patk: number;
+  matk: number;
+  mp: number;
+  maxMp: number;
+  sp: number;
+  maxSp: number;
+  def: number;
+  res: number;
+  agi: number;
+  skill: number;
+  luck: number;
+  wis: number;
 }
 
 /**
@@ -80,17 +116,36 @@ export interface Ability {
   effect: (target: EntityId) => void;
 }
 
-// The actual unit data
+// Unit Template (data-driven source for creating units)
+export interface UnitTemplate {
+  id: string;
+  name: string;
+  type: UnitType;
+  rarity: UnitRarity;
+  description: string;
+  modelId: string;
+  baseStats: BaseStats;
+  attributes: UnitAttributes;
+  growthRates: GrowthRates;
+  abilityIds: string[];
+  preferredTerrain: TerrainType[];
+  affinity: Affinity;
+}
+
+// The actual unit data (instance of a unit)
 export interface UnitData {
   id: EntityId;
+  templateId: string; // Reference to the template this unit was created from
   name: string;
   type: UnitType;
   position: [number, number, number];
   stats: BaseStats;
   attributes: UnitAttributes;
   abilities: Ability[];
-  modelPath?: string; // Path to 3D model if using custom models
-  textureMap?: string; // Path to texture
+  level: number;
+  exp: number;
+  affinity: Affinity;
+  modelId: string;
   currentState: "idle" | "moving" | "attacking" | "defending" | "dead";
 }
 
