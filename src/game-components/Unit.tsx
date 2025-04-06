@@ -1,4 +1,3 @@
-// src/game-components/Unit.tsx
 import { memo, useRef, useState, useEffect } from "react";
 import { ThreeEvent, useFrame } from "@react-three/fiber";
 import { useGameStore } from "../store/gameStore";
@@ -69,7 +68,7 @@ const Unit = memo(({ unitId }: UnitProps) => {
 
   // Select the appropriate model and color based on unit type
   const getUnitModel = () => {
-    // In a real game, you'd use different models for different unit types
+    // In a real game, we would use different models for different unit types
     // For this prototype, we'll use simple geometries
     switch (unit.type) {
       case UnitType.WARRIOR:
@@ -83,14 +82,14 @@ const Unit = memo(({ unitId }: UnitProps) => {
         return (
           <mesh onClick={handleUnitClick}>
             <coneGeometry args={[0.4, 0.8, 8]} />
-            <meshStandardMaterial color={isSelected ? "yellow" : "green"} />
+            <meshStandardMaterial color={isSelected ? "yellow" : "blue"} />
           </mesh>
         );
       case UnitType.MAGE:
         return (
           <mesh onClick={handleUnitClick}>
             <sphereGeometry args={[0.4, 8, 8]} />
-            <meshStandardMaterial color={isSelected ? "yellow" : "purple"} />
+            <meshStandardMaterial color={isSelected ? "yellow" : "blue"} />
           </mesh>
         );
       default:

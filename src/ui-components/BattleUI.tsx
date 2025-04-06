@@ -66,28 +66,85 @@ const BattleUI = () => {
           <div className="border-t border-gray-600 pt-4">
             <h3 className="text-lg font-semibold">{selectedUnit.name}</h3>
             <p className="text-sm">Type: {selectedUnit.type}</p>
-            <div className="mt-2">
+            <div className="mt-2 max-h-64 overflow-y-auto pr-2">
+              {/* Basic Stats */}
+              <div className="flex justify-between">
+                <span>Level:</span>
+                <span>{selectedUnit.stats.level}</span>
+              </div>
               <div className="flex justify-between">
                 <span>HP:</span>
                 <span>
                   {selectedUnit.stats.hp}/{selectedUnit.stats.maxHp}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span>Attack:</span>
-                <span>{selectedUnit.stats.attack}</span>
+
+              {/* Combat Stats */}
+              <div className="mt-2 border-t border-gray-600 pt-2">
+                <div className="flex justify-between">
+                  <span>P.ATK:</span>
+                  <span>{selectedUnit.stats.patk}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>M.ATK:</span>
+                  <span>{selectedUnit.stats.matk}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>DEF:</span>
+                  <span>{selectedUnit.stats.def}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>RES:</span>
+                  <span>{selectedUnit.stats.res}</span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span>Defense:</span>
-                <span>{selectedUnit.stats.defense}</span>
+
+              {/* Secondary Stats */}
+              <div className="mt-2 border-t border-gray-600 pt-2">
+                <div className="flex justify-between">
+                  <span>AGI:</span>
+                  <span>{selectedUnit.stats.agi}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>SKILL:</span>
+                  <span>{selectedUnit.stats.skill}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>LUCK:</span>
+                  <span>{selectedUnit.stats.luck}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>WIS:</span>
+                  <span>{selectedUnit.stats.wis}</span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span>Movement:</span>
-                <span>{selectedUnit.stats.movement}</span>
+
+              {/* Movement Stats */}
+              <div className="mt-2 border-t border-gray-600 pt-2">
+                <div className="flex justify-between">
+                  <span>MOV:</span>
+                  <span>{selectedUnit.stats.mov}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>JUMP:</span>
+                  <span>{selectedUnit.stats.jump}</span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span>Jump:</span>
-                <span>{selectedUnit.stats.jump}</span>
+
+              {/* Attributes */}
+              <div className="mt-2 border-t border-gray-600 pt-2">
+                <div className="flex justify-between">
+                  <span>Hit:</span>
+                  <span>{selectedUnit.attributes.hitRate}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Evade:</span>
+                  <span>{selectedUnit.attributes.evasionRate}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Resolve:</span>
+                  <span>{selectedUnit.attributes.resolve}%</span>
+                </div>
               </div>
             </div>
           </div>

@@ -10,6 +10,7 @@ import {
   GameAction,
   UnitType,
   BaseStats,
+  UnitAttributes,
 } from "../types/game";
 
 // Core game state
@@ -111,39 +112,105 @@ function createDefaultStats(type: UnitType): BaseStats {
   switch (type) {
     case UnitType.WARRIOR:
       return {
-        hp: 100,
-        maxHp: 100,
-        movement: 4,
+        level: 1,
+        exp: 0,
+        hp: 55,
+        maxHp: 55,
+        patk: 8,
+        matk: 2,
+        range: 1,
+        def: 20,
+        res: 5,
+        agi: 4,
+        skill: 20,
+        luck: 5,
+        wis: 1,
+        mov: 4,
         jump: 2,
-        attack: 8,
-        defense: 5,
       };
     case UnitType.ARCHER:
       return {
+        level: 1,
+        exp: 0,
         hp: 75,
         maxHp: 75,
-        movement: 5,
+        patk: 6,
+        matk: 3,
+        range: 5,
+        def: 10,
+        res: 5,
+        agi: 8,
+        skill: 25,
+        luck: 30,
+        wis: 3,
+        mov: 5,
         jump: 2,
-        attack: 6,
-        defense: 3,
       };
     case UnitType.MAGE:
       return {
+        level: 1,
+        exp: 0,
         hp: 60,
         maxHp: 60,
-        movement: 3,
+        patk: 2,
+        matk: 10,
+        range: 3,
+        def: 2,
+        res: 6,
+        agi: 3,
+        skill: 3,
+        luck: 4,
+        wis: 10,
+        mov: 3,
         jump: 1,
-        attack: 10,
-        defense: 2,
       };
     default:
       return {
+        level: 1,
+        exp: 0,
         hp: 80,
         maxHp: 80,
-        movement: 4,
+        patk: 5,
+        matk: 5,
+        range: 1,
+        def: 3,
+        res: 3,
+        agi: 4,
+        skill: 4,
+        luck: 4,
+        wis: 4,
+        mov: 4,
         jump: 2,
-        attack: 5,
-        defense: 3,
+      };
+  }
+}
+
+// Create default attributes based on type
+function createDefaultAttributes(type: UnitType): UnitAttributes {
+  switch (type) {
+    case UnitType.WARRIOR:
+      return {
+        hitRate: 90,
+        evasionRate: 5,
+        resolve: 40,
+      };
+    case UnitType.ARCHER:
+      return {
+        hitRate: 95,
+        evasionRate: 20,
+        resolve: 5,
+      };
+    case UnitType.MAGE:
+      return {
+        hitRate: 85,
+        evasionRate: 5,
+        resolve: 5,
+      };
+    default:
+      return {
+        hitRate: 90,
+        evasionRate: 5,
+        resolve: 5,
       };
   }
 }
@@ -272,6 +339,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ) => {
     const id = uuidv4();
     const stats = createDefaultStats(type);
+    const attributes = createDefaultAttributes(type);
 
     // Create the unit
     set((state) => ({
@@ -283,6 +351,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           type,
           position,
           stats,
+          attributes,
           abilities: [],
           currentState: "idle",
         },
@@ -546,7 +615,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
         if (
           neighbor.traversable &&
-          newMovementCost <= unit.stats.movement &&
+          newMovementCost <= unit.stats.mov &&
           newJumpCost <= unit.stats.jump &&
           totalHeightDifference <= unit.stats.jump
         ) {
