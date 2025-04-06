@@ -1,32 +1,73 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect } from "react";
 import { useGameStore } from "../store/gameStore";
+import { UnitType } from "../types/game";
 import OrthoCam from "./OrthoCam";
 import Terrain from "./Terrain";
 import Unit from "./Unit";
 
 const GameRenderer = () => {
-  const { terrain, units, addUnit } = useGameStore();
+  const { terrain, units, players, createPlayer, createUnit } = useGameStore();
 
-  // Initialize the game by adding a player unit when terrain is generated
+  // Initialize the game
   useEffect(() => {
-    if (terrain.grid.length > 0 && Object.keys(units).length === 0) {
-      // Find a suitable starting position for the unit (center of map)
-      const startingCell =
+    if (terrain.grid.length > 0 && Object.keys(players).length === 0) {
+      // Create player
+      const playerId = createPlayer("Player 1", "player");
+
+      // Create enemy
+      const enemyId = createPlayer("Enemy", "enemy");
+
+      // Find a suitable starting position for player units
+      const playerStartCell =
         terrain.grid.find(
           (cell) => cell.x === 0 && cell.z === 0 && cell.traversable
         ) || terrain.grid.find((cell) => cell.traversable);
 
-      if (startingCell) {
-        // Add a player unit at the starting position
-        addUnit({
-          position: [startingCell.x, startingCell.y, startingCell.z],
-          movement: 4,
-          jump: 2,
-        });
+      // Find a position for enemy units
+      const enemyStartCell =
+        terrain.grid.find(
+          (cell) => cell.x === 5 && cell.z === 5 && cell.traversable
+        ) ||
+        terrain.grid.find(
+          (cell) => cell.traversable && cell !== playerStartCell
+        );
+
+      if (playerStartCell) {
+        // Add player units
+        createUnit(playerId, UnitType.WARRIOR, [
+          playerStartCell.x,
+          playerStartCell.y,
+          playerStartCell.z,
+        ]);
+
+        // Find adjacent cells
+        const adjacentCell = terrain.grid.find(
+          (cell) =>
+            cell.x === playerStartCell.x + 1 &&
+            cell.z === playerStartCell.z &&
+            cell.traversable
+        );
+
+        if (adjacentCell) {
+          createUnit(playerId, UnitType.ARCHER, [
+            adjacentCell.x,
+            adjacentCell.y,
+            adjacentCell.z,
+          ]);
+        }
+      }
+
+      if (enemyStartCell) {
+        // Add enemy unit
+        createUnit(enemyId, UnitType.MAGE, [
+          enemyStartCell.x,
+          enemyStartCell.y,
+          enemyStartCell.z,
+        ]);
       }
     }
-  }, [terrain.grid, units, addUnit]);
+  }, [terrain.grid, players, createPlayer, createUnit]);
 
   return (
     <div className="h-full w-full">

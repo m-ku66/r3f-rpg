@@ -1,25 +1,19 @@
 import { create } from "zustand";
 import { createNoise2D } from "simplex-noise";
 import { v4 as uuidv4 } from "uuid";
-
-// Type for grid cell (moved from Terrain.tsx)
-export type GridCell = {
-  x: number;
-  y: number;
-  z: number;
-  traversable: boolean;
-};
-
-// Type for game unit
-export type Unit = {
-  id: string;
-  position: [number, number, number];
-  movement: number;
-  jump: number;
-};
+import {
+  EntityId,
+  UnitData,
+  Player,
+  GridCell,
+  TerrainType,
+  GameAction,
+  UnitType,
+  BaseStats,
+} from "../types/game";
 
 // Core game state
-type GameState = {
+interface GameState {
   // Terrain state
   terrain: {
     grid: GridCell[];
@@ -28,9 +22,17 @@ type GameState = {
     depth: number;
     noiseScale: number;
   };
-  // Units state
-  units: Record<string, Unit>;
-  selectedUnitId: string | null;
+
+  // Game entities
+  units: Record<EntityId, UnitData>;
+  players: Record<EntityId, Player>;
+
+  // Game state
+  currentTurn: EntityId; // ID of the current player
+  currentPhase: "movement" | "action" | "end";
+  selectedUnitId: EntityId | null;
+  selectedAbilityId: string | null;
+
   // Camera state
   camera: {
     rotation: number;
@@ -38,16 +40,14 @@ type GameState = {
     target: [number, number, number];
     zoom: number;
   };
-  // Turn-based system
-  currentTurn: "player" | "enemy";
-  // Action states
-  selectedAction: "move" | "attack" | null;
+
+  // Pathfinding and highlighting
   highlightedCells: GridCell[];
-  // Path for unit movement
   currentPath: GridCell[];
+
   // Event system for observer pattern
   gameEvents: Record<string, Function[]>;
-};
+}
 
 // Helper function to generate terrain
 function generateTerrainGrid(
@@ -96,6 +96,8 @@ function generateTerrainGrid(
           y: y - yOffset,
           z: z - zOffset,
           traversable: y === stackHeight - 1, // Only top cells are traversable
+          terrain: TerrainType.GRASS, // Default terrain type
+          occupiedBy: null,
         });
       }
     }
@@ -104,56 +106,582 @@ function generateTerrainGrid(
   return cells;
 }
 
-// A* pathfinding helpers
-function heuristic(a: GridCell, b: GridCell): number {
-  const horizontalDist = Math.abs(a.x - b.x) + Math.abs(a.z - b.z);
-  const verticalDist = Math.abs(a.y - b.y);
-  return horizontalDist + verticalDist * 1.5; // Vertical movement costs more
+// Create default unit stats based on type
+function createDefaultStats(type: UnitType): BaseStats {
+  switch (type) {
+    case UnitType.WARRIOR:
+      return {
+        hp: 100,
+        maxHp: 100,
+        movement: 4,
+        jump: 2,
+        attack: 8,
+        defense: 5,
+      };
+    case UnitType.ARCHER:
+      return {
+        hp: 75,
+        maxHp: 75,
+        movement: 5,
+        jump: 2,
+        attack: 6,
+        defense: 3,
+      };
+    case UnitType.MAGE:
+      return {
+        hp: 60,
+        maxHp: 60,
+        movement: 3,
+        jump: 1,
+        attack: 10,
+        defense: 2,
+      };
+    default:
+      return {
+        hp: 80,
+        maxHp: 80,
+        movement: 4,
+        jump: 2,
+        attack: 5,
+        defense: 3,
+      };
+  }
 }
 
-function getNeighbors(cell: GridCell, grid: GridCell[]): GridCell[] {
-  const directions = [
-    // Horizontal movement
-    { x: 1, y: 0, z: 0 },
-    { x: -1, y: 0, z: 0 },
-    { x: 0, y: 0, z: 1 },
-    { x: 0, y: 0, z: -1 },
-    // Diagonal movement
-    { x: 1, y: 0, z: 1 },
-    { x: 1, y: 0, z: -1 },
-    { x: -1, y: 0, z: 1 },
-    { x: -1, y: 0, z: -1 },
-    // Vertical movement
-    { x: 0, y: 1, z: 0 },
-    { x: 0, y: -1, z: 0 },
-    // Diagonal vertical movement
-    { x: 1, y: 1, z: 0 },
-    { x: -1, y: 1, z: 0 },
-    { x: 0, y: 1, z: 1 },
-    { x: 0, y: 1, z: -1 },
-    { x: 1, y: -1, z: 0 },
-    { x: -1, y: -1, z: 0 },
-    { x: 0, y: -1, z: 1 },
-    { x: 0, y: -1, z: -1 },
-  ];
+// All the actions and derived state for our game
+interface GameActions {
+  // Terrain actions
+  generateTerrain: (
+    width: number,
+    height: number,
+    depth: number,
+    noiseScale: number
+  ) => void;
 
-  return grid.filter((n) => {
-    const matchingDir = directions.find(
-      (dir) =>
-        n.x === cell.x + dir.x &&
-        n.y === cell.y + dir.y &&
-        n.z === cell.z + dir.z
+  // Unit & Player actions
+  createPlayer: (
+    name: string,
+    faction: "player" | "enemy" | "neutral"
+  ) => EntityId;
+  createUnit: (
+    playerId: EntityId,
+    type: UnitType,
+    position: [number, number, number],
+    name?: string
+  ) => EntityId;
+  selectUnit: (id: EntityId | null) => void;
+  selectAbility: (id: string | null) => void;
+  moveUnit: (id: EntityId, position: [number, number, number]) => void;
+
+  // Game flow actions
+  dispatchAction: (action: GameAction) => void;
+  startTurn: (playerId: EntityId) => void;
+  endTurn: () => void;
+
+  // Pathfinding and movement
+  calculateReachableCells: (unitId: EntityId) => void;
+  findPath: (unitId: EntityId, targetCell: GridCell) => void;
+  executePath: () => void;
+
+  // Camera actions
+  rotateCamera: (direction: "left" | "right") => void;
+  resetCamera: () => void;
+
+  // Event system (Observer pattern)
+  on: (event: string, callback: Function) => void;
+  off: (event: string, callback: Function) => void;
+  emit: (event: string, ...args: any[]) => void;
+}
+
+// Combine state and actions
+type GameStore = GameState & GameActions;
+
+// Create the store
+export const useGameStore = create<GameStore>((set, get) => ({
+  // Initial state
+  terrain: {
+    grid: [],
+    width: 20,
+    height: 10,
+    depth: 20,
+    noiseScale: 30,
+  },
+  units: {},
+  players: {},
+  currentTurn: "",
+  currentPhase: "movement",
+  selectedUnitId: null,
+  selectedAbilityId: null,
+  camera: {
+    rotation: 45,
+    position: [10, 10, 10],
+    target: [0, 0, 0],
+    zoom: 0.5,
+  },
+  highlightedCells: [],
+  currentPath: [],
+  gameEvents: {},
+
+  // Terrain actions
+  generateTerrain: (width, height, depth, noiseScale) => {
+    const grid = generateTerrainGrid(width, height, depth, noiseScale);
+    set({
+      terrain: {
+        grid,
+        width,
+        height,
+        depth,
+        noiseScale,
+      },
+    });
+    get().emit("terrainGenerated", grid);
+  },
+
+  // Player and Unit actions
+  createPlayer: (name, faction) => {
+    const id = uuidv4();
+    set((state) => ({
+      players: {
+        ...state.players,
+        [id]: {
+          id,
+          name,
+          faction,
+          unitIds: [],
+          resources: {
+            gold: faction === "player" ? 1000 : 500,
+          },
+        },
+      },
+    }));
+
+    // If this is the first player, set them as current turn
+    if (Object.keys(get().players).length === 0) {
+      get().startTurn(id);
+    }
+
+    get().emit("playerCreated", id);
+    return id;
+  },
+
+  createUnit: (
+    playerId,
+    type,
+    position,
+    name = `${type}-${uuidv4().slice(0, 4)}`
+  ) => {
+    const id = uuidv4();
+    const stats = createDefaultStats(type);
+
+    // Create the unit
+    set((state) => ({
+      units: {
+        ...state.units,
+        [id]: {
+          id,
+          name,
+          type,
+          position,
+          stats,
+          abilities: [],
+          currentState: "idle",
+        },
+      },
+    }));
+
+    // Add the unit to the player's roster
+    set((state) => ({
+      players: {
+        ...state.players,
+        [playerId]: {
+          ...state.players[playerId],
+          unitIds: [...state.players[playerId].unitIds, id],
+        },
+      },
+    }));
+
+    // Update the cell occupation
+    const cellIndex = get().terrain.grid.findIndex(
+      (cell) =>
+        cell.x === position[0] &&
+        cell.y === position[1] &&
+        cell.z === position[2]
     );
 
-    return matchingDir && n.traversable;
-  });
-}
+    if (cellIndex !== -1) {
+      set((state) => {
+        const newGrid = [...state.terrain.grid];
+        newGrid[cellIndex] = {
+          ...newGrid[cellIndex],
+          occupiedBy: id,
+        };
 
+        return {
+          terrain: {
+            ...state.terrain,
+            grid: newGrid,
+          },
+        };
+      });
+    }
+
+    get().emit("unitCreated", id, playerId);
+    return id;
+  },
+
+  selectUnit: (id) => {
+    set({ selectedUnitId: id });
+    if (id) {
+      get().calculateReachableCells(id);
+      get().emit("unitSelected", id);
+    } else {
+      set({ highlightedCells: [], currentPath: [] });
+      get().emit("unitDeselected");
+    }
+  },
+
+  selectAbility: (id) => {
+    set({ selectedAbilityId: id });
+    if (id) {
+      get().emit("abilitySelected", id);
+    } else {
+      get().emit("abilityDeselected");
+    }
+  },
+
+  moveUnit: (id, position) => {
+    // Update the unit position
+    set((state) => ({
+      units: {
+        ...state.units,
+        [id]: {
+          ...state.units[id],
+          position,
+          currentState: "idle",
+        },
+      },
+      highlightedCells: [],
+      currentPath: [],
+    }));
+
+    // Update cell occupation
+    const { terrain } = get();
+
+    // Find old cell and clear it
+    const oldCellIndex = terrain.grid.findIndex(
+      (cell) => cell.occupiedBy === id
+    );
+
+    if (oldCellIndex !== -1) {
+      set((state) => {
+        const newGrid = [...state.terrain.grid];
+        newGrid[oldCellIndex] = {
+          ...newGrid[oldCellIndex],
+          occupiedBy: null,
+        };
+
+        return {
+          terrain: {
+            ...state.terrain,
+            grid: newGrid,
+          },
+        };
+      });
+    }
+
+    // Find new cell and set it
+    const newCellIndex = terrain.grid.findIndex(
+      (cell) =>
+        Math.abs(cell.x - position[0]) < 0.1 &&
+        Math.abs(cell.y - position[1]) < 0.1 &&
+        Math.abs(cell.z - position[2]) < 0.1
+    );
+
+    if (newCellIndex !== -1) {
+      set((state) => {
+        const newGrid = [...state.terrain.grid];
+        newGrid[newCellIndex] = {
+          ...newGrid[newCellIndex],
+          occupiedBy: id,
+        };
+
+        return {
+          terrain: {
+            ...state.terrain,
+            grid: newGrid,
+          },
+        };
+      });
+    }
+
+    get().emit("unitMoved", id, position);
+  },
+
+  // Game flow actions
+  dispatchAction: (action) => {
+    switch (action.type) {
+      case "MOVE":
+        get().moveUnit(action.unitId, action.targetPosition);
+        break;
+      case "ATTACK":
+        // Implement attack logic
+        break;
+      case "SELECT_UNIT":
+        get().selectUnit(action.unitId);
+        break;
+      case "SELECT_ABILITY":
+        get().selectAbility(action.abilityId);
+        break;
+      case "END_TURN":
+        get().endTurn();
+        break;
+    }
+  },
+
+  startTurn: (playerId) => {
+    set({
+      currentTurn: playerId,
+      currentPhase: "movement",
+      selectedUnitId: null,
+      selectedAbilityId: null,
+    });
+    get().emit("turnStarted", playerId);
+  },
+
+  endTurn: () => {
+    const { players, currentTurn } = get();
+    const playerIds = Object.keys(players);
+
+    if (playerIds.length === 0) return;
+
+    const currentIndex = playerIds.indexOf(currentTurn);
+    const nextIndex = (currentIndex + 1) % playerIds.length;
+    const nextPlayerId = playerIds[nextIndex];
+
+    set({
+      currentPhase: "movement",
+      selectedUnitId: null,
+      selectedAbilityId: null,
+      highlightedCells: [],
+      currentPath: [],
+    });
+
+    get().emit("turnEnded", currentTurn);
+    get().startTurn(nextPlayerId);
+  },
+
+  // Pathfinding and movement
+  calculateReachableCells: (unitId) => {
+    const { units, terrain } = get();
+    const unit = units[unitId];
+    if (!unit) return;
+
+    // Find the unit's current cell
+    const unitCell = terrain.grid.find((cell) => {
+      const [ux, uy, uz] = unit.position;
+      return (
+        Math.abs(cell.x - ux) < 0.1 &&
+        Math.abs(cell.y - uy) < 0.1 &&
+        Math.abs(cell.z - uz) < 0.1 &&
+        cell.traversable
+      );
+    });
+
+    if (!unitCell) return;
+
+    // Use a queue-based approach to find all reachable cells
+    const reachable: GridCell[] = [];
+    const visited = new Set<string>();
+    const queue: { cell: GridCell; movementCost: number; jumpCost: number }[] =
+      [{ cell: unitCell, movementCost: 0, jumpCost: 0 }];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const cellKey = `${current.cell.x},${current.cell.y},${current.cell.z}`;
+
+      if (visited.has(cellKey)) continue;
+      visited.add(cellKey);
+
+      // Don't add occupied cells to reachable list (except the starting cell)
+      if (!current.cell.occupiedBy || current.cell.occupiedBy === unitId) {
+        reachable.push(current.cell);
+      }
+
+      // Don't continue pathfinding from occupied cells
+      if (current.cell.occupiedBy && current.cell.occupiedBy !== unitId) {
+        continue;
+      }
+
+      // Find neighbors
+      const neighbors = terrain.grid.filter((n) => {
+        // Check if it's a valid neighbor (adjacent horizontally, vertically, or diagonally)
+        const dx = Math.abs(n.x - current.cell.x);
+        const dy = Math.abs(n.y - current.cell.y);
+        const dz = Math.abs(n.z - current.cell.z);
+
+        const isAdjacent =
+          // Horizontal or vertical movement
+          ((dx === 1 && dy === 0 && dz === 0) ||
+            (dx === 0 && dy === 1 && dz === 0) ||
+            (dx === 0 && dy === 0 && dz === 1) ||
+            // Diagonal movement on same level
+            (dx === 1 && dy === 0 && dz === 1)) &&
+          // Must be traversable
+          n.traversable;
+
+        return isAdjacent;
+      });
+
+      for (const neighbor of neighbors) {
+        const neighborKey = `${neighbor.x},${neighbor.y},${neighbor.z}`;
+        if (visited.has(neighborKey)) continue;
+
+        const heightDifference = neighbor.y - current.cell.y;
+        // Jumping up costs more than moving down
+        const newJumpCost =
+          current.jumpCost + (heightDifference > 0 ? heightDifference : 0);
+        const newMovementCost = current.movementCost + 1;
+
+        const totalHeightDifference = Math.abs(neighbor.y - unitCell.y);
+
+        if (
+          neighbor.traversable &&
+          newMovementCost <= unit.stats.movement &&
+          newJumpCost <= unit.stats.jump &&
+          totalHeightDifference <= unit.stats.jump
+        ) {
+          queue.push({
+            cell: neighbor,
+            movementCost: newMovementCost,
+            jumpCost: newJumpCost,
+          });
+        }
+      }
+    }
+
+    set({ highlightedCells: reachable });
+    get().emit("reachableCellsCalculated", reachable);
+  },
+
+  findPath: (unitId, targetCell) => {
+    const { units, terrain, highlightedCells } = get();
+    const unit = units[unitId];
+
+    if (!unit) return;
+
+    // Check if the target cell is reachable
+    const isReachable = highlightedCells.some(
+      (cell) =>
+        cell.x === targetCell.x &&
+        cell.y === targetCell.y &&
+        cell.z === targetCell.z
+    );
+
+    if (!isReachable) return;
+
+    // Find the unit's current cell
+    const unitCell = terrain.grid.find((cell) => {
+      const [ux, uy, uz] = unit.position;
+      return (
+        Math.abs(cell.x - ux) < 0.1 &&
+        Math.abs(cell.y - uy) < 0.1 &&
+        Math.abs(cell.z - uz) < 0.1 &&
+        cell.traversable
+      );
+    });
+
+    if (!unitCell) return;
+
+    // Use A* algorithm to find path
+    // (Using the existing A* implementation)
+    const path = aStarPathfinding(unitCell, targetCell, terrain.grid);
+
+    if (path.length > 0) {
+      set({ currentPath: path });
+      get().emit("pathFound", path);
+    }
+  },
+
+  executePath: () => {
+    const { currentPath, selectedUnitId } = get();
+
+    if (!selectedUnitId || currentPath.length < 2) return;
+
+    const lastCell = currentPath[currentPath.length - 1];
+    get().moveUnit(selectedUnitId, [lastCell.x, lastCell.y, lastCell.z]);
+    set({ currentPath: [] });
+    get().emit("pathExecuted");
+  },
+
+  // Camera actions
+  rotateCamera: (direction) => {
+    set((state) => {
+      const newRotation =
+        direction === "left"
+          ? (state.camera.rotation + 45) % 360
+          : (state.camera.rotation - 45) % 360;
+
+      return {
+        camera: {
+          ...state.camera,
+          rotation: newRotation,
+        },
+      };
+    });
+    get().emit("cameraRotated", get().camera.rotation);
+  },
+
+  resetCamera: () => {
+    set((state) => ({
+      camera: {
+        ...state.camera,
+        rotation: 45,
+      },
+    }));
+    get().emit("cameraReset");
+  },
+
+  // Event system (Observer pattern)
+  on: (event, callback) => {
+    set((state) => {
+      const events = state.gameEvents[event] || [];
+      return {
+        gameEvents: {
+          ...state.gameEvents,
+          [event]: [...events, callback],
+        },
+      };
+    });
+  },
+
+  off: (event, callback) => {
+    set((state) => {
+      const events = state.gameEvents[event] || [];
+      return {
+        gameEvents: {
+          ...state.gameEvents,
+          [event]: events.filter((cb) => cb !== callback),
+        },
+      };
+    });
+  },
+
+  emit: (event, ...args) => {
+    const events = get().gameEvents[event] || [];
+    events.forEach((callback) => {
+      callback(...args);
+    });
+  },
+}));
+
+// A* pathfinding function
 function aStarPathfinding(
   start: GridCell,
   target: GridCell,
   grid: GridCell[]
 ): GridCell[] {
+  // A* implementation as before
+  // ... (keep the same implementation)
   const openSet: GridCell[] = [start];
   const closedSet = new Set<string>();
   const cameFrom = new Map<string, GridCell>();
@@ -188,7 +716,25 @@ function aStarPathfinding(
     openSet.splice(openSet.indexOf(current), 1);
     closedSet.add(currentKey);
 
-    const neighbors = getNeighbors(current, grid);
+    // Get neighbors
+    const neighbors = grid.filter((n) => {
+      const dx = Math.abs(n.x - current.x);
+      const dy = Math.abs(n.y - current.y);
+      const dz = Math.abs(n.z - current.z);
+
+      const isAdjacent =
+        // Horizontal or vertical movement
+        ((dx === 1 && dy === 0 && dz === 0) ||
+          (dx === 0 && dy === 1 && dz === 0) ||
+          (dx === 0 && dy === 0 && dz === 1) ||
+          // Diagonal movement on same level
+          (dx === 1 && dy === 0 && dz === 1)) &&
+        // Must be traversable and not occupied (or occupied by the target)
+        n.traversable &&
+        (!n.occupiedBy || n.occupiedBy === target.occupiedBy);
+
+      return isAdjacent;
+    });
 
     for (const neighbor of neighbors) {
       const neighborKey = getCellKey(neighbor);
@@ -222,6 +768,12 @@ function aStarPathfinding(
   return [];
 }
 
+function heuristic(a: GridCell, b: GridCell): number {
+  const horizontalDist = Math.abs(a.x - b.x) + Math.abs(a.z - b.z);
+  const verticalDist = Math.abs(a.y - b.y);
+  return horizontalDist + verticalDist * 1.5; // Vertical movement costs more
+}
+
 function reconstructPath(
   current: GridCell,
   cameFrom: Map<string, GridCell>
@@ -237,315 +789,3 @@ function reconstructPath(
 
   return path;
 }
-
-// The store type combining state and actions
-type GameStore = GameState & {
-  // Terrain actions
-  generateTerrain: (
-    width: number,
-    height: number,
-    depth: number,
-    noiseScale: number
-  ) => void;
-
-  // Unit actions
-  addUnit: (unit: Omit<Unit, "id">) => string;
-  selectUnit: (id: string | null) => void;
-  moveUnit: (id: string, position: [number, number, number]) => void;
-  calculateReachableCells: (unitId: string) => void;
-
-  // Camera actions
-  rotateCamera: (direction: "left" | "right") => void;
-  resetCamera: () => void;
-
-  // Game flow actions
-  startTurn: (player: "player" | "enemy") => void;
-  endTurn: () => void;
-
-  // Event system (Observer pattern)
-  on: (event: string, callback: Function) => void;
-  off: (event: string, callback: Function) => void;
-  emit: (event: string, ...args: any[]) => void;
-
-  // A* Pathfinding
-  findPath: (unitId: string, targetCell: GridCell) => void;
-  executePath: () => void;
-};
-
-export const useGameStore = create<GameStore>((set, get) => ({
-  // Initial state
-  terrain: {
-    grid: [],
-    width: 20,
-    height: 10,
-    depth: 20,
-    noiseScale: 30,
-  },
-  units: {},
-  selectedUnitId: null,
-  camera: {
-    rotation: 45,
-    position: [10, 10, 10],
-    target: [0, 0, 0],
-    zoom: 0.5,
-  },
-  currentTurn: "player",
-  selectedAction: null,
-  highlightedCells: [],
-  currentPath: [],
-  gameEvents: {},
-
-  // Terrain actions
-  generateTerrain: (width, height, depth, noiseScale) => {
-    const grid = generateTerrainGrid(width, height, depth, noiseScale);
-    set({
-      terrain: {
-        grid,
-        width,
-        height,
-        depth,
-        noiseScale,
-      },
-    });
-    get().emit("terrainGenerated", grid);
-  },
-
-  // Unit actions
-  addUnit: (unit) => {
-    const id = uuidv4();
-    set((state) => ({
-      units: {
-        ...state.units,
-        [id]: {
-          ...unit,
-          id,
-        },
-      },
-    }));
-    get().emit("unitAdded", id);
-    return id;
-  },
-
-  selectUnit: (id) => {
-    set({ selectedUnitId: id });
-    if (id) {
-      get().calculateReachableCells(id);
-      get().emit("unitSelected", id);
-    } else {
-      set({ highlightedCells: [], currentPath: [] });
-      get().emit("unitDeselected");
-    }
-  },
-
-  moveUnit: (id, position) => {
-    set((state) => ({
-      units: {
-        ...state.units,
-        [id]: {
-          ...state.units[id],
-          position,
-        },
-      },
-      highlightedCells: [],
-      currentPath: [],
-    }));
-    get().emit("unitMoved", id, position);
-  },
-
-  calculateReachableCells: (unitId) => {
-    const { units, terrain } = get();
-    const unit = units[unitId];
-    if (!unit) return;
-
-    // Find the unit's current cell
-    const unitCell = terrain.grid.find((cell) => {
-      const [ux, uy, uz] = unit.position;
-      return (
-        Math.abs(cell.x - ux) < 0.1 &&
-        Math.abs(cell.y - uy) < 0.1 &&
-        Math.abs(cell.z - uz) < 0.1 &&
-        cell.traversable
-      );
-    });
-
-    if (!unitCell) return;
-
-    // Use a queue-based approach to find all reachable cells
-    const reachable: GridCell[] = [];
-    const visited = new Set<string>();
-    const queue: { cell: GridCell; movementCost: number; jumpCost: number }[] =
-      [{ cell: unitCell, movementCost: 0, jumpCost: 0 }];
-
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      const cellKey = `${current.cell.x},${current.cell.y},${current.cell.z}`;
-
-      if (visited.has(cellKey)) continue;
-      visited.add(cellKey);
-      reachable.push(current.cell);
-
-      const neighbors = getNeighbors(current.cell, terrain.grid);
-
-      for (const neighbor of neighbors) {
-        const neighborKey = `${neighbor.x},${neighbor.y},${neighbor.z}`;
-        if (visited.has(neighborKey)) continue;
-
-        const horizontalDistance =
-          Math.abs(neighbor.x - unitCell.x) + Math.abs(neighbor.z - unitCell.z);
-
-        const heightDifference = neighbor.y - current.cell.y;
-        // Jumping up costs more than moving down
-        const newJumpCost =
-          current.jumpCost + (heightDifference > 0 ? heightDifference : 0);
-        const newMovementCost = current.movementCost + 1;
-
-        const totalHeightDifference = Math.abs(neighbor.y - unitCell.y);
-
-        if (
-          neighbor.traversable &&
-          newMovementCost <= unit.movement &&
-          newJumpCost <= unit.jump &&
-          totalHeightDifference <= unit.jump
-        ) {
-          queue.push({
-            cell: neighbor,
-            movementCost: newMovementCost,
-            jumpCost: newJumpCost,
-          });
-        }
-      }
-    }
-
-    set({ highlightedCells: reachable });
-    get().emit("reachableCellsCalculated", reachable);
-  },
-
-  // Camera actions
-  rotateCamera: (direction) => {
-    set((state) => {
-      const newRotation =
-        direction === "left"
-          ? (state.camera.rotation + 45) % 360
-          : (state.camera.rotation - 45) % 360;
-
-      return {
-        camera: {
-          ...state.camera,
-          rotation: newRotation,
-        },
-      };
-    });
-    get().emit("cameraRotated", get().camera.rotation);
-  },
-
-  resetCamera: () => {
-    set((state) => ({
-      camera: {
-        ...state.camera,
-        rotation: 45,
-      },
-    }));
-    get().emit("cameraReset");
-  },
-
-  // Game flow actions
-  startTurn: (player) => {
-    set({ currentTurn: player });
-    get().emit("turnStarted", player);
-  },
-
-  endTurn: () => {
-    const nextTurn = get().currentTurn === "player" ? "enemy" : "player";
-    set({
-      currentTurn: nextTurn,
-      selectedUnitId: null,
-      selectedAction: null,
-      highlightedCells: [],
-      currentPath: [],
-    });
-    get().emit("turnEnded");
-    get().emit("turnStarted", nextTurn);
-  },
-
-  // Event system (Observer pattern)
-  on: (event, callback) => {
-    set((state) => {
-      const events = state.gameEvents[event] || [];
-      return {
-        gameEvents: {
-          ...state.gameEvents,
-          [event]: [...events, callback],
-        },
-      };
-    });
-  },
-
-  off: (event, callback) => {
-    set((state) => {
-      const events = state.gameEvents[event] || [];
-      return {
-        gameEvents: {
-          ...state.gameEvents,
-          [event]: events.filter((cb) => cb !== callback),
-        },
-      };
-    });
-  },
-
-  emit: (event, ...args) => {
-    const events = get().gameEvents[event] || [];
-    events.forEach((callback) => {
-      callback(...args);
-    });
-  },
-
-  // A* Pathfinding
-  findPath: (unitId, targetCell) => {
-    const { units, terrain, highlightedCells } = get();
-    const unit = units[unitId];
-
-    if (!unit) return;
-
-    // Check if the target cell is reachable
-    const isReachable = highlightedCells.some(
-      (cell) =>
-        cell.x === targetCell.x &&
-        cell.y === targetCell.y &&
-        cell.z === targetCell.z
-    );
-
-    if (!isReachable) return;
-
-    // Find the unit's current cell
-    const unitCell = terrain.grid.find((cell) => {
-      const [ux, uy, uz] = unit.position;
-      return (
-        Math.abs(cell.x - ux) < 0.1 &&
-        Math.abs(cell.y - uy) < 0.1 &&
-        Math.abs(cell.z - uz) < 0.1 &&
-        cell.traversable
-      );
-    });
-
-    if (!unitCell) return;
-
-    // Use the A* algorithm to find the path
-    const path = aStarPathfinding(unitCell, targetCell, terrain.grid);
-
-    if (path.length > 0) {
-      set({ currentPath: path });
-      get().emit("pathFound", path);
-    }
-  },
-
-  executePath: () => {
-    const { currentPath, selectedUnitId, units } = get();
-
-    if (!selectedUnitId || currentPath.length < 2) return;
-
-    const lastCell = currentPath[currentPath.length - 1];
-    get().moveUnit(selectedUnitId, [lastCell.x, lastCell.y, lastCell.z]);
-    set({ currentPath: [] });
-    get().emit("pathExecuted");
-  },
-}));
