@@ -1,66 +1,47 @@
 import { Canvas } from "@react-three/fiber";
-import { useState } from "react";
+import { useEffect } from "react";
+import { useGameStore } from "../store/gameStore";
 import OrthoCam from "./OrthoCam";
-import Terrain, { GridCell } from "./Terrain";
+import Terrain from "./Terrain";
 import Unit from "./Unit";
-import { CameraStateContext } from "../contexts/CameraContext";
-import { useContext } from "react";
 
 const GameRenderer = () => {
-  const [terrainGrid, setTerrainGrid] = useState<GridCell[]>([]);
-  const cameraState = useContext(CameraStateContext);
+  const { terrain, units, addUnit } = useGameStore();
 
-  const findStartingCell = (x: number, z: number): GridCell | null => {
-    const column = terrainGrid.filter(
-      (cell) =>
-        Math.abs(cell.x - x) < 0.1 &&
-        Math.abs(cell.z - z) < 0.1 &&
-        cell.traversable
-    );
+  // Initialize the game by adding a player unit when terrain is generated
+  useEffect(() => {
+    if (terrain.grid.length > 0 && Object.keys(units).length === 0) {
+      // Find a suitable starting position for the unit (center of map)
+      const startingCell =
+        terrain.grid.find(
+          (cell) => cell.x === 0 && cell.z === 0 && cell.traversable
+        ) || terrain.grid.find((cell) => cell.traversable);
 
-    if (column.length > 0) {
-      const highest = column.reduce((highest, cell) =>
-        cell.y > highest.y ? cell : highest
-      );
-      return highest;
+      if (startingCell) {
+        // Add a player unit at the starting position
+        addUnit({
+          position: [startingCell.x, startingCell.y, startingCell.z],
+          movement: 4,
+          jump: 2,
+        });
+      }
     }
-    return null;
-  };
-
-  const startingCell = findStartingCell(0, 0);
+  }, [terrain.grid, units, addUnit]);
 
   return (
     <div className="h-full w-full">
       <Canvas>
-        <CameraStateContext.Provider value={cameraState}>
-          <OrthoCam
-            position={[10, 10, 10]}
-            target={[0, 0, 0]}
-            zoom={0.5}
-            resetDelay={2000}
-            panSpeed={0.01}
-          />
+        <OrthoCam zoom={0.5} resetDelay={2000} panSpeed={0.01} />
 
-          <ambientLight intensity={0.5} />
-          <pointLight position={[0, 5, 0]} intensity={0.5} />
+        <ambientLight intensity={0.5} />
+        <pointLight position={[0, 5, 0]} intensity={0.5} />
 
-          <Terrain
-            width={20}
-            height={10}
-            depth={20}
-            noiseScale={30}
-            onGridGenerated={setTerrainGrid}
-          />
+        <Terrain width={20} height={10} depth={20} noiseScale={30} />
 
-          {terrainGrid.length > 0 && startingCell && (
-            <Unit
-              position={[startingCell.x, startingCell.y, startingCell.z]}
-              movement={4}
-              jump={2}
-              grid={terrainGrid}
-            />
-          )}
-        </CameraStateContext.Provider>
+        {/* Render all units */}
+        {Object.keys(units).map((unitId) => (
+          <Unit key={unitId} unitId={unitId} />
+        ))}
       </Canvas>
     </div>
   );

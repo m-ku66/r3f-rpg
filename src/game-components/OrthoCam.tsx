@@ -1,67 +1,57 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Vector3, OrthographicCamera as ThreeOrthographicCamera } from "three";
-import { useCameraState } from "../contexts/CameraContext";
+import { useGameStore } from "../store/gameStore";
 
 type OrthographicCameraProps = {
-  position: [number, number, number]; // Camera position
-  target: [number, number, number]; // Camera target
-  zoom?: number; // Camera zoom
-  left?: number; // Left plane of the camera frustum
-  right?: number; // Right plane of the camera frustum
-  top?: number; // Top plane of the camera frustum
-  bottom?: number; // Bottom plane of the camera frustum
-  near?: number; // Near clipping plane
-  far?: number; // Far clipping plane
-  resetDelay?: number; // Time in ms before camera resets to default position
-  panSpeed?: number; // Speed multiplier for panning
+  zoom?: number;
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+  near?: number;
+  far?: number;
+  resetDelay?: number;
+  panSpeed?: number;
 };
 
-export default function OrthographicCamera(props: OrthographicCameraProps) {
-  const {
-    position,
-    target,
-    zoom = 1,
-    left = -5,
-    right = 5,
-    top = 5,
-    bottom = -5,
-    near = 0.01,
-    far = 1000,
-    resetDelay = 2000, // Default 2 seconds
-    panSpeed = 1,
-  } = props;
+export default function OrthographicCamera({
+  zoom = 1,
+  left = -5,
+  right = 5,
+  top = 5,
+  bottom = -5,
+  near = 0.01,
+  far = 1000,
+  resetDelay = 2000,
+  panSpeed = 0.01,
+}: OrthographicCameraProps) {
+  const { set, size } = useThree();
+  const { camera } = useGameStore();
 
-  const { set, size } = useThree(); // Extracts set and size(reactive pixel size of canvas) from the useThree hook
-  const cameraRef = useRef<ThreeOrthographicCamera>(); // Ref to store the OrthographicCamera instance
-  const cameraTarget = useRef(new Vector3(...target)); // Here we store the target of the camera
+  const cameraRef = useRef<ThreeOrthographicCamera>();
+  const cameraTarget = useRef(new Vector3(...camera.target));
 
   // Pan state
-  const [panOffset, setPanOffset] = useState<[number, number, number]>([
-    0, 0, 0,
-  ]);
   const isDragging = useRef(false);
   const lastMousePos = useRef<{ x: number; y: number } | null>(null);
   const resetTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const panOffset = useRef<[number, number, number]>([0, 0, 0]);
 
-  // Camera rotation
-  const { rotation } = useCameraState();
-
-  /// Calculate rotated position
-  const angleInRadians = (rotation * Math.PI) / 180;
+  // Calculate rotated position based on camera rotation
+  const angleInRadians = (camera.rotation * Math.PI) / 180;
   const radius = Math.sqrt(
-    position[0] * position[0] + position[2] * position[2]
+    camera.position[0] * camera.position[0] +
+      camera.position[2] * camera.position[2]
   );
   const rotatedPosition: [number, number, number] = [
     radius * Math.cos(angleInRadians),
-    position[1],
+    camera.position[1],
     radius * Math.sin(angleInRadians),
   ];
 
   useEffect(() => {
-    // When the aspect ratio of the canvas changes, the left and right
-    // planes of the camera frustum need to be adjusted accordingly.
-    // Otherwise the camera's field of view will appear to change.
+    // Adjust camera when canvas size changes
     const aspect = size.width / size.height;
     const adjustedLeft = left * aspect;
     const adjustedRight = right * aspect;
@@ -96,12 +86,12 @@ export default function OrthographicCamera(props: OrthographicCameraProps) {
         cameraRef.current.removeFromParent();
       }
     };
-  }, [set, size, rotation, left, right, top, bottom, near, far, zoom]);
+  }, [set, size, camera.rotation, left, right, top, bottom, near, far, zoom]);
 
-  // Update target when prop changes
+  // Update target when it changes
   useEffect(() => {
-    cameraTarget.current.set(...target);
-  }, [target]);
+    cameraTarget.current.set(...camera.target);
+  }, [camera.target]);
 
   // Handle mouse events for panning
   useEffect(() => {
@@ -119,20 +109,20 @@ export default function OrthographicCamera(props: OrthographicCameraProps) {
       // Scale the movement based on camera zoom and viewport size
       const movementScale = (1 / zoom) * (size.width / 1000);
 
-      setPanOffset(([x, y, z]) => [
-        x - deltaX * movementScale,
-        y + deltaY * movementScale,
-        z,
-      ]);
+      panOffset.current = [
+        panOffset.current[0] - deltaX * movementScale,
+        panOffset.current[1] + deltaY * movementScale,
+        panOffset.current[2],
+      ];
 
       lastMousePos.current = { x: e.clientX, y: e.clientY };
 
-      // Clear existing timeout and set a new one
+      // Reset pan offset after a delay
       if (resetTimeout.current) {
         clearTimeout(resetTimeout.current);
       }
       resetTimeout.current = setTimeout(() => {
-        setPanOffset([0, 0, 0]);
+        panOffset.current = [0, 0, 0];
       }, resetDelay);
     };
 
@@ -160,15 +150,15 @@ export default function OrthographicCamera(props: OrthographicCameraProps) {
   useFrame(() => {
     if (cameraRef.current) {
       const basePosition = [
-        rotatedPosition[0] + panOffset[0],
-        rotatedPosition[1] + panOffset[1],
-        rotatedPosition[2] + panOffset[2],
+        rotatedPosition[0] + panOffset.current[0],
+        rotatedPosition[1] + panOffset.current[1],
+        rotatedPosition[2] + panOffset.current[2],
       ] as [number, number, number];
 
       const newTarget: [number, number, number] = [
-        target[0] + panOffset[0],
-        target[1] + panOffset[1],
-        target[2] + panOffset[2],
+        camera.target[0] + panOffset.current[0],
+        camera.target[1] + panOffset.current[1],
+        camera.target[2] + panOffset.current[2],
       ];
 
       cameraRef.current.position.set(...basePosition);
