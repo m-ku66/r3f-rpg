@@ -1,13 +1,32 @@
 export type EntityId = string;
 
 // Base stats that any unit would have
+// These directly affect how a unit performs in battle
 export interface BaseStats {
-  hp: number;
-  maxHp: number;
-  movement: number;
-  jump: number;
-  attack: number;
-  defense: number;
+  // STATS
+  level: number; // Unit level
+  exp: number; // Experience points
+  hp: number; // Current HP
+  maxHp: number; // Max HP
+  patk: number; // Physical attack power
+  matk: number; // Magical attack power
+  def: number; // Physical defense
+  res: number; // Magical defense
+  agi: number; // Agility (speed/turn order)
+  skill: number; // Skill (crit chance for physical attacks; critical hits never miss)
+  luck: number; // Luck (chance to resist status effects, critical hits, and debuffs)
+  wis: number; // Wisdom (crit chance for magical attacks; critical hits never miss)
+  mov: number; // Movement (horizontal movement)
+  jump: number; // Jump (vertical movement)
+}
+
+// Attributes of a unit
+// These are modifiers that affect the unit's performance in battle
+// They are not directly affected by stats but can be modified by items, skills, or abilities
+export interface UnitAttributes {
+  hitRate: number; // Chance to hit the target
+  evasionRate: number; // Chance to evade an attack
+  resolve: number; // Chance to survivie fatal damage
 }
 
 // Types of units
@@ -36,6 +55,7 @@ export interface UnitData {
   type: UnitType;
   position: [number, number, number];
   stats: BaseStats;
+  attributes: UnitAttributes;
   abilities: Ability[];
   modelPath?: string; // Path to 3D model if using custom models
   textureMap?: string; // Path to texture
