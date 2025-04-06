@@ -10,6 +10,10 @@ export interface BaseStats {
   maxHp: number; // Max HP
   patk: number; // Physical attack power
   matk: number; // Magical attack power
+  mp: number; // Magic points consumed by magic attacks
+  maxMp: number; // Max magic points
+  sp: number; // Stamina points consumed by physical attacks
+  maxSp: number; // Max stamina points
   range: number; // Range of attack (how far the unit can attack)
   def: number; // Physical defense. Reduces damage from physical attacks(ex: 10def = 10% damage reduction)
   res: number; // Magical defense. Reduces damage from magical attacks(ex: 10res = 10% damage reduction)
@@ -36,7 +40,7 @@ export interface BaseStats {
  * If a unit has 10 skill for example, it has a 10% chance to crit.
  * Critical hits deal 1.8 times more damage than normal hits and never miss regardless of the target's evasion rate.
  * Wisdom works the same way for magical attacks.
- * 
+ *
  * LUCK
  * This stat is used to determine the chance to resist status effects, critical hits, and debuffs.
  * If a unit has 10 luck for example, it has a 10% chance to resist a status effects, critical hits, and debuffs.
